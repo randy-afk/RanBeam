@@ -1,0 +1,61 @@
+site_name: RanBeam
+site_url: https://randy-afk.github.io/RanBeam/
+repo_url: https://github.com/randy-afk/RanBeam
+repo_name: randy-afk/RanBeam
+
+theme:
+  name: material
+  palette:
+    scheme: slate
+    primary: custom
+    accent: deep orange
+  font:
+    text: Inter
+    code: JetBrains Mono
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+  logo: assets/logo_docs.png
+  favicon: assets/logo_docs.png
+
+extra_css:
+  - stylesheets/extra.css
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Usage: usage.md
+  - Parameters: parameters.md
+  - Machine Types: machine_types.md
+  - Luminosity: luminosity.md
+  - Physics Reference: physics.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - tables
+  - attr_list
+  - pymdownx.arithmatex:
+      generic: true
+
+extra_javascript:
+  - https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.min.js
+
+extra:
+  social:
+    - icon: fontawesome/solid/envelope
+      link: mailto:randika@jlab.org
+      name: Randika Gamage
+
+  author: Randika Gamage
+  affiliation: Jefferson Lab / BNL
