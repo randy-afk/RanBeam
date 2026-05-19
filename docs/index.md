@@ -2,6 +2,10 @@
 
 **Accelerator Beam Parameter Calculator**
 
+!!! warning "Work in progress"
+    RanBeam is under active development. Features may change and bugs may exist.
+    Proceed at your own risk.
+    
 RanBeam is a Python desktop application for computing relativistic beam parameters, optics quantities, synchrotron radiation properties, and luminosity — for any particle species and machine type.
 
 Enter any combination of known values and the solver propagates through the full dependency graph to fill in everything else. Conflicts are flagged immediately.
@@ -33,4 +37,5 @@ python main.py
 
 ---
 
-*Author: Randika Gamage — Jefferson Lab / BNL*
+*Author: Randika Gamage — Jefferson Lab*
+Support: *Good luck, I believe in you* 🫡

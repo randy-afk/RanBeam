@@ -1,5 +1,9 @@
 # Installation
 
+!!! warning "Work in progress"
+    RanBeam is under active development. Features may change and bugs may exist.
+    Proceed at your own risk.
+    
 ## Requirements
 
 | Requirement | Version |

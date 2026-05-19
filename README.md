@@ -2,6 +2,12 @@
 
 **Accelerator Beam Parameter Calculator**
 
+> [!WARNING]
+> RanBeam is under active development. Features may change and bugs may exist.
+> Proceed at your own risk.
+>
+
+
 Auto-propagating dependency graph solver for accelerator physics parameters.
 Enter any known quantities — everything derivable is computed automatically.
 Conflicting inputs are flagged, not silently overridden.
@@ -53,3 +59,8 @@ RanBeam/
 | Circular — Protons/Ions | + Ring/RF |
 | Circular — Electrons | + Radiation |
 | Collider | + Luminosity |
+
+
+> [!NOTE]
+> **Author:** Randika Gamage — Jefferson Lab **Contact:** randika@jlab.org
+> Support: *Good luck, I believe in you* 🫡
