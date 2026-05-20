@@ -54,6 +54,3 @@ RanBeam/
     ├── logo.py      # Matplotlib logo generator
     └── palette.py   # All UI colors — single source of truth
 ```
-
-!!! note
-    `palette.py` is the single source of truth for all GUI colors. Never hardcode color values elsewhere.
