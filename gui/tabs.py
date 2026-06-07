@@ -224,9 +224,15 @@ class RingRFTab(_BaseTab):
         box_rf, fields_rf = _make_group("RF Parameters", [
             "harmonic", "f_RF",
             "V_RF", "phi_s",
-            "Q_s", "bucket_area",
+            "Q_s", "energy_accept", "bucket_area",
         ])
         self._register_group(box_rf, fields_rf)
+
+        box_sc, fields_sc = _make_group("Space Charge", [
+            "N_ppb", "bunching_factor", "I_beam",
+            "delta_Qx_sc", "delta_Qy_sc",
+        ])
+        self._register_group(box_sc, fields_sc)
         self._inner_layout.addStretch()
 
 

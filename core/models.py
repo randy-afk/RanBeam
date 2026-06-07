@@ -97,6 +97,7 @@ UNITS: dict[str, str] = {
     "phi_s":           "deg",
     "Q_s":             "",
     "bucket_area":     "eV·s",
+    "energy_accept":   "",          # dimensionless δ_max
     # --- Radiation (electrons) ---
     "U0":              "keV",
     "E_crit":          "keV",
@@ -104,6 +105,12 @@ UNITS: dict[str, str] = {
     "tau_y":           "ms",
     "tau_z":           "ms",
     "sigma_E_sr":      "MeV",
+    # --- Space charge ---
+    "N_ppb":           "particles",
+    "bunching_factor": "",
+    "I_beam":          "A",
+    "delta_Qx_sc":     "",
+    "delta_Qy_sc":     "",
     # --- Luminosity ---
     "N1":              "particles",
     "N2":              "particles",
@@ -166,6 +173,7 @@ LABELS: dict[str, str] = {
     "phi_s":           "Synchronous phase  φs",
     "Q_s":             "Synchrotron tune  Qs",
     "bucket_area":     "RF bucket area",
+    "energy_accept":   "RF energy acceptance  δ_max",
     # Radiation
     "U0":              "Energy loss/turn  U₀",
     "E_crit":          "Critical photon energy  Ec",
@@ -173,6 +181,12 @@ LABELS: dict[str, str] = {
     "tau_y":           "Vertical damping time  τy",
     "tau_z":           "Longitudinal damping time  τz",
     "sigma_E_sr":      "SR energy spread  σE",
+    # Space charge
+    "N_ppb":           "Particles / bunch  N",
+    "bunching_factor": "Bunching factor  Bf",
+    "I_beam":          "Beam current  I",
+    "delta_Qx_sc":     "Space charge tune shift  ΔQx",
+    "delta_Qy_sc":     "Space charge tune shift  ΔQy",
     # Luminosity
     "N1":              "Particles / bunch  N₁",
     "N2":              "Particles / bunch  N₂",
@@ -253,6 +267,7 @@ class BeamState:
     phi_s:          Optional[float] = None
     Q_s:            Optional[float] = None
     bucket_area:    Optional[float] = None
+    energy_accept:  Optional[float] = None
 
     # --- Radiation ---
     U0:         Optional[float] = None
@@ -261,6 +276,13 @@ class BeamState:
     tau_y:      Optional[float] = None
     tau_z:      Optional[float] = None
     sigma_E_sr: Optional[float] = None
+
+    # --- Space charge ---
+    N_ppb:          Optional[float] = None
+    bunching_factor: Optional[float] = None
+    I_beam:         Optional[float] = None
+    delta_Qx_sc:    Optional[float] = None
+    delta_Qy_sc:    Optional[float] = None
 
     # --- Luminosity (beam 2 values stored flat) ---
     N1:             Optional[float] = None

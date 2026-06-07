@@ -21,12 +21,14 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 from PySide6.QtWidgets import (
-    QWidget, QHBoxLayout, QLabel, QLineEdit, QPushButton, QSizePolicy
+    QWidget, QHBoxLayout, QLabel, QLineEdit, QPushButton,
+    QSizePolicy, QMenu, QApplication, QMessageBox
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QEvent
 from PySide6.QtGui import QColor, QPalette
 
 
+from core.formulas import FORMULAS
 from palette import (
     BG, PANEL, MANTLE, BORDER, SURFACE2,
     ACCENT, ACCENT2, FG, FG_DIM, FG_LBL,
@@ -92,9 +94,21 @@ class LockableField(QWidget):
         self._unit.setStyleSheet(f"color: {FG_DIM}; font-size: 11px;")
         layout.addWidget(self._unit)
 
+        # Info button
+        self._info_btn = QPushButton("i")
+        self._info_btn.setFixedSize(24, 24)
+        self._info_btn.setToolTip("Show formula")
+        self._info_btn.setStyleSheet(
+            f"QPushButton {{ background: {PANEL}; border: 1px solid {ACCENT};"
+            f" border-radius: 4px; color: {ACCENT}; font-size: 11px; font-weight: bold; }}"
+            f"QPushButton:hover {{ background: {ACCENT}; color: {BG}; }}"
+        )
+        self._info_btn.clicked.connect(self._on_info_clicked)
+        layout.addWidget(self._info_btn)
+
         # Lock button
         self._lock_btn = QPushButton("🔓")
-        self._lock_btn.setFixedSize(28, 28)
+        self._lock_btn.setFixedSize(32, 28)
         self._lock_btn.setCheckable(True)
         self._lock_btn.setToolTip("Lock this value")
         self._lock_btn.setStyleSheet(self._lock_style())
@@ -102,6 +116,13 @@ class LockableField(QWidget):
         layout.addWidget(self._lock_btn)
 
         layout.addStretch()
+
+        # Right-click context menu on the edit field
+        self._edit.setContextMenuPolicy(Qt.CustomContextMenu)
+        self._edit.customContextMenuRequested.connect(self._on_context_menu)
+
+        # Keyboard navigation — Enter/Return moves to next field
+        self._edit.returnPressed.connect(self._on_return_pressed)
 
     # -----------------------------------------------------------------------
     # Public API
@@ -177,6 +198,48 @@ class LockableField(QWidget):
         self._edit.setStyleSheet(self._edit_style())
         self.lock_toggled.emit(self.field_name, checked)
 
+    def _on_info_clicked(self) -> None:
+        formula = FORMULAS.get(self.field_name, "No formula available.")
+        label   = self._label.text().strip()
+        msg = QMessageBox(self.window())
+        msg.setWindowTitle(f"Formula — {label}")
+        msg.setText(formula)
+        msg.setIcon(QMessageBox.Information)
+        msg.setStyleSheet(
+            f"QMessageBox {{ background: {PANEL}; color: {FG}; }}"
+            f"QLabel {{ color: {FG}; font-size: 12px; }}"
+            f"QPushButton {{ background: {ACCENT}; color: {BG}; border-radius: 4px; padding: 4px 12px; }}"
+        )
+        msg.exec()
+
+    def _on_context_menu(self, pos) -> None:
+        menu = QMenu(self)
+        menu.setStyleSheet(
+            f"QMenu {{ background: {PANEL}; color: {FG}; border: 1px solid {BORDER}; }}"
+            f"QMenu::item:selected {{ background: {ACCENT}; color: {BG}; }}"
+        )
+        copy_val = menu.addAction("Copy value")
+        copy_with_unit = menu.addAction("Copy value with unit")
+        menu.addSeparator()
+        clear_act = menu.addAction("Clear field")
+
+        action = menu.exec(self._edit.mapToGlobal(pos))
+        if action == copy_val:
+            txt = self._edit.text().strip()
+            if txt:
+                QApplication.clipboard().setText(txt)
+        elif action == copy_with_unit:
+            txt  = self._edit.text().strip()
+            unit = self._unit.text().strip()
+            if txt:
+                QApplication.clipboard().setText(f"{txt} {unit}".strip())
+        elif action == clear_act:
+            self.clear()
+
+    def _on_return_pressed(self) -> None:
+        """Move focus to the next field in the tab order."""
+        self._edit.focusNextChild()
+
     # -----------------------------------------------------------------------
     # Style helpers
     # -----------------------------------------------------------------------
@@ -205,11 +268,16 @@ class LockableField(QWidget):
         )
 
     def _lock_style(self) -> str:
-        color = COLOR_LOCK_ON if self._locked else COLOR_LOCK_OFF
+        if self._locked:
+            return (
+                f"QPushButton {{ background: {COLOR_LOCK_ON}; border: 1px solid {COLOR_LOCK_ON};"
+                f" border-radius: 4px; color: {BG}; font-size: 10px; font-weight: bold; }}"
+                f"QPushButton:hover {{ background: {ACCENT2}; }}"
+            )
         return (
-            f"QPushButton {{ background: transparent; border: 1px solid {color};"
-            f" border-radius: 4px; color: {color}; font-size: 13px; }}"
-            f"QPushButton:hover {{ background: {SURFACE2}; }}"
+            f"QPushButton {{ background: transparent; border: 1px solid {BORDER};"
+            f" border-radius: 4px; color: {FG_LBL}; font-size: 10px; }}"
+            f"QPushButton:hover {{ background: {SURFACE2}; border-color: {ACCENT}; color: {ACCENT}; }}"
         )
 
 

@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QComboBox, QPushButton, QTabWidget, QStatusBar,
     QFileDialog, QMessageBox, QDoubleSpinBox, QFrame, QSizePolicy,
-    QLineEdit,
+    QLineEdit, QGridLayout, QStackedWidget, QScrollArea,
 )
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont, QColor, QPalette, QAction
@@ -385,16 +385,17 @@ class RanBeamWindow(QMainWindow):
         self._selector = _ParticleSelector()
         root.addWidget(self._selector)
 
+        # Toolbar
         toolbar = QWidget()
         toolbar.setStyleSheet("background: transparent;")
         tl = QHBoxLayout(toolbar)
         tl.setContentsMargins(12, 4, 12, 4)
         tl.setSpacing(8)
 
-        self._btn_clear    = QPushButton("✕  Clear All")
-        self._btn_save     = QPushButton("💾  Save State")
-        self._btn_load     = QPushButton("📂  Load State")
-        self._btn_load_b2  = QPushButton("📂  Load as Beam 2")
+        self._btn_clear   = QPushButton("✕  Clear All")
+        self._btn_save    = QPushButton("💾  Save State")
+        self._btn_load    = QPushButton("📂  Load State")
+        self._btn_load_b2 = QPushButton("📂  Load as Beam 2")
 
         for btn in [self._btn_clear, self._btn_save,
                     self._btn_load, self._btn_load_b2]:
@@ -402,9 +403,17 @@ class RanBeamWindow(QMainWindow):
             tl.addWidget(btn)
 
         tl.addStretch()
+
+        # View toggle button
+        self._btn_toggle_view = QPushButton("⊞  Full View")
+        self._btn_toggle_view.setFixedHeight(28)
+        self._btn_toggle_view.setCheckable(True)
+        self._btn_toggle_view.setToolTip("Toggle between tabbed and full-page view")
+        tl.addWidget(self._btn_toggle_view)
+
         root.addWidget(toolbar)
 
-        self._tabs = QTabWidget()
+        # Create tab widgets once — shared between both views
         self._tab_widgets = [
             RelativisticTab(),
             TransverseTab(),
@@ -413,11 +422,23 @@ class RanBeamWindow(QMainWindow):
             RadiationTab(),
             LuminosityTab(),
         ]
+
+        # --- Tabbed view ---
+        self._tabs = QTabWidget()
         for name, tab in zip(TAB_NAMES, self._tab_widgets):
             self._tabs.addTab(tab, name)
 
-        root.addWidget(self._tabs)
+        # --- Full view ---
+        self._full_view = self._build_full_view()
 
+        # Stacked widget to switch between the two
+        self._view_stack = QStackedWidget()
+        self._view_stack.addWidget(self._tabs)       # index 0 — tabbed
+        self._view_stack.addWidget(self._full_view)  # index 1 — full
+
+        root.addWidget(self._view_stack)
+
+        # Status bar
         self._status = QStatusBar()
         self.setStatusBar(self._status)
         self._status.showMessage("Ready.")
@@ -425,6 +446,90 @@ class RanBeamWindow(QMainWindow):
         self._conflict_label = QLabel("")
         self._conflict_label.setStyleSheet(f"color: {ERROR}; font-size: 11px;")
         self._status.addPermanentWidget(self._conflict_label)
+
+    def _build_full_view(self) -> QScrollArea:
+        """
+        Build the full-page grid view (3 cols x 2 rows).
+        Does NOT reparent the tab widgets — they stay in self._tabs.
+        On toggle, we reparent them between the two containers.
+        """
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+
+        self._full_container = QWidget()
+        self._full_container.setStyleSheet(f"background: {BG};")
+        self._full_grid = QGridLayout(self._full_container)
+        self._full_grid.setContentsMargins(10, 10, 10, 10)
+        self._full_grid.setSpacing(10)
+
+        # Pre-build the frames (without widgets yet — added on toggle)
+        self._full_frames = []
+        positions = [(0,0),(0,1),(0,2),(1,0),(1,1),(1,2)]
+        for i, (row, col) in enumerate(positions):
+            frame = QFrame()
+            frame.setFrameShape(QFrame.StyledPanel)
+            frame.setStyleSheet(
+                f"QFrame {{ border: 1px solid {BORDER}; border-radius: 6px;"
+                f" background: {PANEL}; }}"
+            )
+            fl = QVBoxLayout(frame)
+            fl.setContentsMargins(0, 0, 0, 0)
+            fl.setSpacing(0)
+
+            title_bar = QLabel(TAB_NAMES[i])
+            title_bar.setStyleSheet(
+                f"QLabel {{ background: {ACCENT}; color: {CRUST}; font-weight: bold;"
+                f" font-size: 11px; padding: 4px 10px; border-radius: 4px 4px 0 0;"
+                f" border: none; }}"
+            )
+            fl.addWidget(title_bar)
+            # Placeholder — tab widget added on toggle
+            self._full_frames.append((frame, fl))
+            self._full_grid.addWidget(frame, row, col)
+
+        for col in range(3):
+            self._full_grid.setColumnStretch(col, 1)
+        for row in range(2):
+            self._full_grid.setRowStretch(row, 1)
+
+        scroll.setWidget(self._full_container)
+        return scroll
+
+    def _toggle_view(self, checked: bool) -> None:
+        """Switch between tabbed and full view, reparenting tab widgets."""
+        if checked:
+            # Save current size before expanding
+            self._saved_size = self.size()
+            # Move tab widgets from QTabWidget into full view frames
+            for i, (tab, (frame, fl)) in enumerate(
+                    zip(self._tab_widgets, self._full_frames)):
+                self._tabs.removeTab(0)
+                fl.addWidget(tab)
+                tab.show()
+
+            self._view_stack.setCurrentIndex(1)
+            self._btn_toggle_view.setText("☰  Tab View")
+            # Only resize if not already maximized/large
+            if self.width() < 1200:
+                self.resize(1400, 900)
+        else:
+            # Move tab widgets back into QTabWidget
+            for i, (tab, (frame, fl)) in enumerate(
+                    zip(self._tab_widgets, self._full_frames)):
+                fl.removeWidget(tab)
+                self._tabs.addTab(tab, TAB_NAMES[i])
+                tab.show()
+
+            self._view_stack.setCurrentIndex(0)
+            self._btn_toggle_view.setText("⊞  Full View")
+            # Restore saved size if available, otherwise default
+            if hasattr(self, '_saved_size'):
+                self.resize(self._saved_size)
+            else:
+                self.resize(900, 780)
+            # Re-apply machine visibility
+            self._on_machine_changed("")
 
     def _build_menus(self) -> None:
         mb = self.menuBar()
@@ -477,6 +582,7 @@ class RanBeamWindow(QMainWindow):
         self._tab_widgets[2].unit_changed.connect(self._on_eps_L_unit_changed)
         self._tab_widgets[5].hourglass_changed.connect(self._on_hourglass_changed)
 
+        self._btn_toggle_view.clicked.connect(self._toggle_view)
         self._btn_clear.clicked.connect(self._on_clear)
         self._btn_save.clicked.connect(self._on_save)
         self._btn_load.clicked.connect(self._on_load)
@@ -515,9 +621,24 @@ class RanBeamWindow(QMainWindow):
             locked |= tab.get_locked()
         self._state.locked = locked
 
+        # Collect user-typed values from _user_fields tracking
         user_vals: dict[str, float | None] = {}
         for tab in self._tab_widgets:
             user_vals.update(tab.get_user_values())
+
+        # Also sweep all fields directly — catches values typed after reparenting
+        # Only add to user_vals if the field widget is NOT in computed state
+        # This prevents computed fields from being locked in as user inputs
+        for tab in self._tab_widgets:
+            for field_name, field_widget in tab._fields.items():
+                if field_name in locked:
+                    continue
+                # Only read from widget if already tracked as user-typed
+                # OR if the field has a non-computed value (user typed it)
+                if field_name in tab._user_fields:
+                    val = field_widget.get_value()
+                    if val is not None:
+                        user_vals[field_name] = val
 
         for tab in self._tab_widgets:
             for field_name in tab._fields:
@@ -527,6 +648,57 @@ class RanBeamWindow(QMainWindow):
                     setattr(self._state, field_name, user_vals[field_name])
                 else:
                     setattr(self._state, field_name, None)
+
+        # If circumference is entered but machine is linac, prompt to switch
+        if (user_vals.get("circumference") is not None
+                and self._state.machine_type == "linac"):
+            self._prompt_circular_switch()
+
+    def _prompt_circular_switch(self) -> None:
+        """Ask user if they want to switch to a circular machine type."""
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Switch Machine Type?")
+        dlg.setFixedSize(520, 120)
+        dlg.setStyleSheet(
+            f"QDialog {{ background: {PANEL}; }}"
+            f"QLabel {{ color: {FG}; font-size: 12px; }}"
+            f"QPushButton {{ background: {MANTLE}; border: 1px solid {BORDER};"
+            f" border-radius: 6px; padding: 6px 16px; color: {ACCENT}; }}"
+            f"QPushButton:hover {{ background: {SURFACE2}; }}"
+        )
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(12)
+        layout.setContentsMargins(20, 16, 20, 16)
+
+        lbl = QLabel("Circumference entered — this looks like a circular machine.\nSwitch machine type?")
+        lbl.setWordWrap(True)
+        layout.addWidget(lbl)
+
+        btn_row = QHBoxLayout()
+        btn_proton   = QPushButton("Circular — Protons/Ions")
+        btn_electron = QPushButton("Circular — Electrons")
+        btn_collider = QPushButton("Collider")
+        btn_cancel   = QPushButton("Keep Linac")
+        btn_cancel.setStyleSheet(
+            f"QPushButton {{ background: {MANTLE}; border: 1px solid {BORDER};"
+            f" border-radius: 6px; padding: 6px 16px; color: {FG_LBL}; }}"
+        )
+        for btn in [btn_proton, btn_electron, btn_collider, btn_cancel]:
+            btn_row.addWidget(btn)
+        layout.addLayout(btn_row)
+
+        def switch(mtype):
+            rev_machine = {v: k for k, v in MACHINE_TYPES.items()}
+            self._selector.machine_combo.setCurrentText(rev_machine[mtype])
+            dlg.accept()
+
+        btn_proton.clicked.connect(lambda: switch("circular_proton"))
+        btn_electron.clicked.connect(lambda: switch("circular_electron"))
+        btn_collider.clicked.connect(lambda: switch("collider"))
+        btn_cancel.clicked.connect(dlg.reject)
+
+        dlg.exec()
 
     def _push_to_ui(self, conflicts: list[str]) -> None:
         for tab in self._tab_widgets:
