@@ -17,6 +17,7 @@ from PySide6.QtCore import Signal, Qt
 
 from gui.fields import LockableField
 from core.models import UNITS, LABELS, BeamState
+import palette as _pal
 
 
 # ---------------------------------------------------------------------------
@@ -102,6 +103,11 @@ class _BaseTab(QWidget):
         self._user_fields.clear()
         for f in self._fields.values():
             f.clear()
+
+    def refresh_theme(self) -> None:
+        """Re-apply every field's stylesheet after a runtime theme switch."""
+        for f in self._fields.values():
+            f.refresh_theme()
 
 
 # ---------------------------------------------------------------------------
@@ -243,12 +249,11 @@ class RadiationTab(_BaseTab):
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
 
-        note = QLabel(
+        self._note = QLabel(
             "ℹ  Requires: bending radius ρ (Ring/RF tab), total energy, and revolution frequency."
         )
-        note.setStyleSheet("color: #888; font-style: italic; font-size: 11px;")
-        note.setWordWrap(True)
-        self._inner_layout.addWidget(note)
+        self._note.setWordWrap(True)
+        self._inner_layout.addWidget(self._note)
 
         box, fields = _make_group("Synchrotron Radiation", [
             "U0", "E_crit",
@@ -257,6 +262,11 @@ class RadiationTab(_BaseTab):
         ])
         self._register_group(box, fields)
         self._inner_layout.addStretch()
+        self.refresh_theme()
+
+    def refresh_theme(self) -> None:
+        super().refresh_theme()
+        self._note.setStyleSheet(f"color: {_pal.FG_DIM}; font-style: italic; font-size: 11px;")
 
 
 # ---------------------------------------------------------------------------
@@ -273,7 +283,6 @@ class LuminosityTab(_BaseTab):
         hg_layout = QHBoxLayout(hg_row)
         hg_layout.setContentsMargins(8, 4, 8, 0)
         self._hg_check = QCheckBox("Apply hourglass correction factor H")
-        self._hg_check.setStyleSheet("color: #aaa;")
         self._hg_check.stateChanged.connect(
             lambda s: self.hourglass_changed.emit(bool(s))
         )
@@ -281,14 +290,13 @@ class LuminosityTab(_BaseTab):
         hg_layout.addStretch()
         self._inner_layout.addWidget(hg_row)
 
-        note = QLabel(
+        self._note = QLabel(
             "ℹ  Beam 1 parameters come from the Relativistic and Transverse tabs.\n"
             "   Enter Beam 2 parameters below.  Save/Load buttons in the toolbar\n"
             "   let you export the current state and reload it as Beam 2."
         )
-        note.setStyleSheet("color: #888; font-style: italic; font-size: 11px;")
-        note.setWordWrap(True)
-        self._inner_layout.addWidget(note)
+        self._note.setWordWrap(True)
+        self._inner_layout.addWidget(self._note)
 
         box_b1, fields_b1 = _make_group("Beam 1", [
             "N1",
@@ -310,12 +318,18 @@ class LuminosityTab(_BaseTab):
         ])
         self._register_group(box_lumi, fields_lumi)
         self._inner_layout.addStretch()
+        self.refresh_theme()
 
     def push_state(self, state: BeamState, conflicts: list[str]) -> None:
         super().push_state(state, conflicts)
         self._hg_check.blockSignals(True)
         self._hg_check.setChecked(state.hourglass)
         self._hg_check.blockSignals(False)
+
+    def refresh_theme(self) -> None:
+        super().refresh_theme()
+        self._hg_check.setStyleSheet(f"color: {_pal.FG_LBL};")
+        self._note.setStyleSheet(f"color: {_pal.FG_DIM}; font-style: italic; font-size: 11px;")
 
 
 # ---------------------------------------------------------------------------

@@ -42,6 +42,8 @@ def _E_total_from_p(p_MeV, m0_MeV):
     return math.sqrt(p_MeV**2 + m0_MeV**2)
 
 def _Brho_from_p(p_MeV, q_e):
+    if q_e == 0:
+        raise ValueError("charge must be non-zero to compute Bρ")
     return (p_MeV * MEV_TO_J / C_LIGHT) / (abs(q_e) * E_CHARGE)
 
 def _p_from_Brho(Brho, q_e):
@@ -66,9 +68,13 @@ def _eta_slip(alpha_c, gamma):
     return alpha_c - 1.0 / gamma**2
 
 def _gamma_tr(alpha_c):
+    if alpha_c <= 0:
+        raise ValueError(f"αc must be > 0 to compute γtr (got {alpha_c:.6g})")
     return 1.0 / math.sqrt(alpha_c)
 
 def _f_rev(C, beta):
+    if C == 0:
+        raise ValueError("circumference must be non-zero to compute f_rev")
     return beta * C_LIGHT / C
 
 def _f_RF(f_rev, h):
@@ -78,12 +84,16 @@ def _eps_L_eVm_from_eVs(eps_L_eVs, beta):
     return eps_L_eVs * beta * C_LIGHT
 
 def _eps_L_eVs_from_eVm(eps_L_eVm, beta):
+    if beta == 0:
+        raise ValueError("beta must be non-zero to convert eV·m → eV·s")
     return eps_L_eVm / (beta * C_LIGHT)
 
 def _sigma_z_m_from_t(sigma_z_t, beta):
     return sigma_z_t * beta * C_LIGHT
 
 def _sigma_z_t_from_m(sigma_z_m, beta):
+    if beta == 0:
+        raise ValueError("beta must be non-zero to convert σz[m] → σz[s]")
     return sigma_z_m / (beta * C_LIGHT)
 
 def _Qs(h, alpha_c, V_RF_MV, E_total_MeV, phi_s_deg, eta_slip):
@@ -131,6 +141,8 @@ def _bucket_area(h, V_RF_MV, E_total_MeV, eta_slip, beta, f_rev):
 
 def _classical_radius(m0_MeV, q_e):
     """Classical particle radius r₀ = q²/(4πε₀ m₀c²) in metres."""
+    if m0_MeV == 0:
+        raise ValueError("rest mass must be non-zero to compute classical radius")
     k_e = 8.9875517923e9   # N·m²/C²
     m0_kg = m0_MeV * MEV_TO_J / C_LIGHT**2
     return k_e * (abs(q_e) * E_CHARGE)**2 / (m0_kg * C_LIGHT**2)
@@ -151,19 +163,27 @@ def _beam_current(N, q_e, f_rev):
 # --- Synchrotron radiation ---
 
 def _U0_keV(E_total_MeV, rho_m):
+    if rho_m == 0:
+        raise ValueError("bending radius must be non-zero to compute U0")
     Cgamma = 8.85e-5
     E_GeV  = E_total_MeV / 1e3
     return Cgamma * E_GeV**4 / rho_m * 1e3
 
 def _E_crit_keV(E_total_MeV, rho_m):
+    if rho_m == 0:
+        raise ValueError("bending radius must be non-zero to compute E_crit")
     E_GeV = E_total_MeV / 1e3
     return 2.218 * E_GeV**3 / rho_m
 
 def _tau_ms(E_total_MeV, U0_keV, T0_s, J):
+    if U0_keV == 0:
+        raise ValueError("U0 must be non-zero to compute damping time")
     U0_MeV = U0_keV / 1e3
     return 2.0 * E_total_MeV / (J * U0_MeV) * T0_s * 1e3
 
 def _sigma_E_sr_MeV(E_total_MeV, rho_m):
+    if rho_m == 0:
+        raise ValueError("bending radius must be non-zero to compute σE")
     Cq  = 3.83e-13
     Jz  = 2.0
     m0  = 0.51099895
@@ -243,7 +263,7 @@ def solve(state: BeamState) -> tuple[BeamState, list[str]]:
         if s.E_total is not None and s.KE is None:
             set_field("KE", _KE_from_E_total(s.E_total, m0))
 
-        if s.E_total is not None and s.gamma is None:
+        if s.E_total is not None and s.gamma is None and m0 != 0:
             set_field("gamma", _gamma_from_E_total(s.E_total, m0))
         if s.gamma is not None and s.beta is None:
             try:
@@ -258,7 +278,7 @@ def solve(state: BeamState) -> tuple[BeamState, list[str]]:
 
         if s.beta_gamma is not None and s.gamma is None:
             set_field("gamma", math.sqrt(1 + s.beta_gamma**2))
-        if s.beta_gamma is not None and s.beta is None and s.gamma is not None:
+        if s.beta_gamma is not None and s.beta is None and s.gamma not in (None, 0):
             set_field("beta", s.beta_gamma / s.gamma)
 
         # beta → gamma (missing reverse path)
@@ -274,7 +294,10 @@ def solve(state: BeamState) -> tuple[BeamState, list[str]]:
             set_field("E_total", _E_total_from_p(s.momentum, m0))
 
         if s.momentum is not None and s.Brho is None:
-            set_field("Brho", _Brho_from_p(s.momentum, q))
+            try:
+                set_field("Brho", _Brho_from_p(s.momentum, q))
+            except ValueError as e:
+                conflicts.append(f"Brho: {e}")
         if s.Brho is not None and s.momentum is None:
             set_field("momentum", _p_from_Brho(s.Brho, q))
 
@@ -294,11 +317,12 @@ def solve(state: BeamState) -> tuple[BeamState, list[str]]:
         if b is not None and g is not None:
             if s.eps_geo_x is not None and s.eps_n_x is None:
                 set_field("eps_n_x", _eps_n_from_geo(s.eps_geo_x, b, g))
-            if s.eps_n_x is not None and s.eps_geo_x is None:
+            if s.eps_n_x is not None and s.eps_geo_x is None and b * g != 0:
                 set_field("eps_geo_x", _eps_geo_from_n(s.eps_n_x, b, g))
 
         # sigma + beta_star → eps_geo (reverse solve)
-        if s.sigma_x is not None and s.beta_star_x is not None and s.eps_geo_x is None:
+        if (s.sigma_x is not None and s.beta_star_x not in (None, 0)
+                and s.eps_geo_x is None):
             set_field("eps_geo_x", s.sigma_x**2 / s.beta_star_x)
 
         # sigma_prime + beta_star → eps_geo (reverse solve)
@@ -307,9 +331,10 @@ def solve(state: BeamState) -> tuple[BeamState, list[str]]:
 
         # eps_geo + beta_star → sigma, sigma_prime
         if s.eps_geo_x is not None and s.beta_star_x is not None:
-            if s.sigma_x is None:
+            if s.sigma_x is None and s.eps_geo_x * s.beta_star_x >= 0:
                 set_field("sigma_x", _sigma_from_eps_beta(s.eps_geo_x, s.beta_star_x))
-            if s.sigma_prime_x is None:
+            if (s.sigma_prime_x is None and s.beta_star_x != 0
+                    and s.eps_geo_x / s.beta_star_x >= 0):
                 set_field("sigma_prime_x", _sigma_prime_from_eps_beta(s.eps_geo_x, s.beta_star_x))
 
         # total beam size with dispersion
@@ -320,7 +345,7 @@ def solve(state: BeamState) -> tuple[BeamState, list[str]]:
                       _sigma_total(s.eps_geo_x, s.beta_star_x, s.eta_x, s.delta_p))
 
         # reverse: sigma_x_total → eps_geo_x (if eta and delta known)
-        if (s.sigma_x_total is not None and s.beta_star_x is not None
+        if (s.sigma_x_total is not None and s.beta_star_x not in (None, 0)
                 and s.eta_x is not None and s.delta_p is not None
                 and s.eps_geo_x is None):
             disp_term = (s.eta_x * s.delta_p)**2
@@ -338,19 +363,21 @@ def solve(state: BeamState) -> tuple[BeamState, list[str]]:
         if b is not None and g is not None:
             if s.eps_geo_y is not None and s.eps_n_y is None:
                 set_field("eps_n_y", _eps_n_from_geo(s.eps_geo_y, b, g))
-            if s.eps_n_y is not None and s.eps_geo_y is None:
+            if s.eps_n_y is not None and s.eps_geo_y is None and b * g != 0:
                 set_field("eps_geo_y", _eps_geo_from_n(s.eps_n_y, b, g))
 
-        if s.sigma_y is not None and s.beta_star_y is not None and s.eps_geo_y is None:
+        if (s.sigma_y is not None and s.beta_star_y not in (None, 0)
+                and s.eps_geo_y is None):
             set_field("eps_geo_y", s.sigma_y**2 / s.beta_star_y)
 
         if s.sigma_prime_y is not None and s.beta_star_y is not None and s.eps_geo_y is None:
             set_field("eps_geo_y", s.sigma_prime_y**2 * s.beta_star_y)
 
         if s.eps_geo_y is not None and s.beta_star_y is not None:
-            if s.sigma_y is None:
+            if s.sigma_y is None and s.eps_geo_y * s.beta_star_y >= 0:
                 set_field("sigma_y", _sigma_from_eps_beta(s.eps_geo_y, s.beta_star_y))
-            if s.sigma_prime_y is None:
+            if (s.sigma_prime_y is None and s.beta_star_y != 0
+                    and s.eps_geo_y / s.beta_star_y >= 0):
                 set_field("sigma_prime_y", _sigma_prime_from_eps_beta(s.eps_geo_y, s.beta_star_y))
 
         if (s.eps_geo_y is not None and s.beta_star_y is not None
@@ -359,7 +386,7 @@ def solve(state: BeamState) -> tuple[BeamState, list[str]]:
             set_field("sigma_y_total",
                       _sigma_total(s.eps_geo_y, s.beta_star_y, s.eta_y, s.delta_p))
 
-        if (s.sigma_y_total is not None and s.beta_star_y is not None
+        if (s.sigma_y_total is not None and s.beta_star_y not in (None, 0)
                 and s.eta_y is not None and s.delta_p is not None
                 and s.eps_geo_y is None):
             disp_term = (s.eta_y * s.delta_p)**2
@@ -373,30 +400,31 @@ def solve(state: BeamState) -> tuple[BeamState, list[str]]:
     if s.beta is not None:
         if s.eps_L_eVs is not None and s.eps_L_eVm is None:
             set_field("eps_L_eVm", _eps_L_eVm_from_eVs(s.eps_L_eVs, s.beta))
-        if s.eps_L_eVm is not None and s.eps_L_eVs is None:
+        if s.eps_L_eVm is not None and s.eps_L_eVs is None and s.beta != 0:
             set_field("eps_L_eVs", _eps_L_eVs_from_eVm(s.eps_L_eVm, s.beta))
-        if s.sigma_z_m is not None and s.sigma_z_t is None:
+        if s.sigma_z_m is not None and s.sigma_z_t is None and s.beta != 0:
             set_field("sigma_z_t", _sigma_z_t_from_m(s.sigma_z_m, s.beta))
         if s.sigma_z_t is not None and s.sigma_z_m is None:
             set_field("sigma_z_m", _sigma_z_m_from_t(s.sigma_z_t, s.beta))
 
         # eL [eV*s] = pi * sigma_z [m] * delta_p * E [eV] / (beta*c)
         if (s.sigma_z_m is not None and s.delta_p is not None
-                and s.E_total is not None and s.eps_L_eVs is None):
+                and s.E_total is not None and s.eps_L_eVs is None
+                and s.beta != 0):
             E_eV = s.E_total * 1e6
             set_field("eps_L_eVs",
                       math.pi * s.sigma_z_m * s.delta_p * E_eV / (s.beta * C_LIGHT))
 
         # Reverse: sigma_z from eL + delta + E
-        if (s.eps_L_eVs is not None and s.delta_p is not None
-                and s.E_total is not None and s.sigma_z_m is None):
+        if (s.eps_L_eVs is not None and s.delta_p not in (None, 0)
+                and s.E_total not in (None, 0) and s.sigma_z_m is None):
             E_eV = s.E_total * 1e6
             set_field("sigma_z_m",
                       s.eps_L_eVs * s.beta * C_LIGHT / (math.pi * s.delta_p * E_eV))
 
         # Reverse: delta from eL + sigma_z + E
-        if (s.eps_L_eVs is not None and s.sigma_z_m is not None
-                and s.E_total is not None and s.delta_p is None):
+        if (s.eps_L_eVs is not None and s.sigma_z_m not in (None, 0)
+                and s.E_total not in (None, 0) and s.delta_p is None):
             E_eV = s.E_total * 1e6
             set_field("delta_p",
                       s.eps_L_eVs * s.beta * C_LIGHT / (math.pi * s.sigma_z_m * E_eV))
@@ -404,10 +432,10 @@ def solve(state: BeamState) -> tuple[BeamState, list[str]]:
         # Second pass on unit conversions — catches eps_L computed above
         if s.eps_L_eVs is not None and s.eps_L_eVm is None:
             set_field("eps_L_eVm", _eps_L_eVm_from_eVs(s.eps_L_eVs, s.beta))
-        if s.eps_L_eVm is not None and s.eps_L_eVs is None:
+        if s.eps_L_eVm is not None and s.eps_L_eVs is None and s.beta != 0:
             set_field("eps_L_eVs", _eps_L_eVs_from_eVm(s.eps_L_eVm, s.beta))
         # Second pass on bunch length conversions
-        if s.sigma_z_m is not None and s.sigma_z_t is None:
+        if s.sigma_z_m is not None and s.sigma_z_t is None and s.beta != 0:
             set_field("sigma_z_t", _sigma_z_t_from_m(s.sigma_z_m, s.beta))
         if s.sigma_z_t is not None and s.sigma_z_m is None:
             set_field("sigma_z_m", _sigma_z_m_from_t(s.sigma_z_t, s.beta))
@@ -420,23 +448,26 @@ def solve(state: BeamState) -> tuple[BeamState, list[str]]:
     if circ:
         if s.alpha_c is not None:
             if s.gamma_tr is None:
-                set_field("gamma_tr", _gamma_tr(s.alpha_c))
-            if s.gamma is not None and s.eta_slip is None:
+                try:
+                    set_field("gamma_tr", _gamma_tr(s.alpha_c))
+                except ValueError as e:
+                    conflicts.append(f"gamma_tr: {e}")
+            if s.gamma not in (None, 0) and s.eta_slip is None:
                 set_field("eta_slip", _eta_slip(s.alpha_c, s.gamma))
-        if s.gamma_tr is not None and s.alpha_c is None:
+        if s.gamma_tr is not None and s.alpha_c is None and s.gamma_tr != 0:
             ac = 1.0 / s.gamma_tr**2
             set_field("alpha_c", ac)
-            if s.gamma is not None and s.eta_slip is None:
+            if s.gamma not in (None, 0) and s.eta_slip is None:
                 set_field("eta_slip", _eta_slip(ac, s.gamma))
 
-        if s.circumference is not None and s.beta is not None and s.f_rev is None:
+        if s.circumference not in (None, 0) and s.beta is not None and s.f_rev is None:
             set_field("f_rev", _f_rev(s.circumference, s.beta))
-        if s.f_rev is not None and s.beta is not None and s.circumference is None:
+        if s.f_rev not in (None, 0) and s.beta is not None and s.circumference is None:
             set_field("circumference", s.beta * C_LIGHT / s.f_rev)
 
-        if s.f_rev is not None and s.harmonic is not None and s.f_RF is None:
+        if s.f_rev not in (None, 0) and s.harmonic is not None and s.f_RF is None:
             set_field("f_RF", _f_RF(s.f_rev, s.harmonic))
-        if s.f_RF is not None and s.f_rev is not None and s.harmonic is None:
+        if s.f_RF is not None and s.f_rev not in (None, 0) and s.harmonic is None:
             set_field("harmonic", round(s.f_RF / s.f_rev))
 
         if (s.harmonic is not None and s.alpha_c is not None
@@ -472,14 +503,19 @@ def solve(state: BeamState) -> tuple[BeamState, list[str]]:
         # Beam current
         if s.N_ppb is not None and s.f_rev is not None and s.I_beam is None:
             set_field("I_beam", _beam_current(s.N_ppb, q, s.f_rev))
-        if s.I_beam is not None and s.f_rev is not None and s.N_ppb is None:
+        if (s.I_beam is not None and s.f_rev not in (None, 0)
+                and s.N_ppb is None and q != 0):
             set_field("N_ppb", s.I_beam / (abs(q) * E_CHARGE * s.f_rev))
 
         # Space charge tune shift
         if (s.N_ppb is not None and s.beta is not None and s.gamma is not None
                 and s.bunching_factor is not None):
-            r0 = _classical_radius(m0, q)
-            if s.eps_geo_x is not None and s.delta_Qx_sc is None:
+            try:
+                r0 = _classical_radius(m0, q)
+            except ValueError as e:
+                r0 = None
+                conflicts.append(f"space charge: {e}")
+            if r0 is not None and s.eps_geo_x is not None and s.delta_Qx_sc is None:
                 try:
                     set_field("delta_Qx_sc",
                               _space_charge_tune_shift(s.N_ppb, r0, s.gamma,
@@ -487,7 +523,7 @@ def solve(state: BeamState) -> tuple[BeamState, list[str]]:
                                                        s.bunching_factor))
                 except Exception as e:
                     conflicts.append(f"ΔQx_sc: {e}")
-            if s.eps_geo_y is not None and s.delta_Qy_sc is None:
+            if r0 is not None and s.eps_geo_y is not None and s.delta_Qy_sc is None:
                 try:
                     set_field("delta_Qy_sc",
                               _space_charge_tune_shift(s.N_ppb, r0, s.gamma,
@@ -505,23 +541,32 @@ def solve(state: BeamState) -> tuple[BeamState, list[str]]:
 
         if rho is not None and E is not None:
             if s.U0 is None:
-                set_field("U0", _U0_keV(E, rho))
+                try:
+                    set_field("U0", _U0_keV(E, rho))
+                except ValueError as e:
+                    conflicts.append(f"U0: {e}")
             if s.E_crit is None:
-                set_field("E_crit", _E_crit_keV(E, rho))
+                try:
+                    set_field("E_crit", _E_crit_keV(E, rho))
+                except ValueError as e:
+                    conflicts.append(f"E_crit: {e}")
             if s.sigma_E_sr is None:
                 try:
                     set_field("sigma_E_sr", _sigma_E_sr_MeV(E, rho))
                 except Exception as e:
                     conflicts.append(f"sigma_E_sr: {e}")
 
-        if s.U0 is not None and s.f_rev is not None and s.E_total is not None:
+        if s.U0 not in (None, 0) and s.f_rev not in (None, 0) and s.E_total is not None:
             T0 = 1.0 / s.f_rev
-            if s.tau_x is None:
-                set_field("tau_x", _tau_ms(s.E_total, s.U0, T0, J=1.0))
-            if s.tau_y is None:
-                set_field("tau_y", _tau_ms(s.E_total, s.U0, T0, J=1.0))
-            if s.tau_z is None:
-                set_field("tau_z", _tau_ms(s.E_total, s.U0, T0, J=2.0))
+            try:
+                if s.tau_x is None:
+                    set_field("tau_x", _tau_ms(s.E_total, s.U0, T0, J=1.0))
+                if s.tau_y is None:
+                    set_field("tau_y", _tau_ms(s.E_total, s.U0, T0, J=1.0))
+                if s.tau_z is None:
+                    set_field("tau_z", _tau_ms(s.E_total, s.U0, T0, J=2.0))
+            except ValueError as e:
+                conflicts.append(f"damping time: {e}")
 
     # ------------------------------------------------------------------
     # Pass 8 — Luminosity

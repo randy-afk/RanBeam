@@ -30,23 +30,39 @@ from matplotlib.collections import LineCollection
 from matplotlib.patheffects import withStroke
 
 # ---------------------------------------------------------------------------
-# Colour palette (matches RanBeam GUI)
+# Colour palette — synced from the live gui.palette theme before each draw,
+# so the logo always matches the active theme/mode. Module-level so
+# _draw_logo()/_curved_track() can read them as plain names.
 # ---------------------------------------------------------------------------
-BG      = "#163A2C"
-BEAM    = "#fda769"
-BEAM2   = "#fd8c3a"
-FG      = "#EEF5F2"
-FG_DIM  = "#8AB0A6"
-TARGET  = "#fda769"
+BG      = "#0b1618"
+BEAM    = "#22e39c"
+BEAM2   = "#4fecb3"
+FG      = "#e2eff0"
+FG_DIM  = "#8fa8ab"
+TARGET  = "#22e39c"
 FLASH   = "#ffffff"
+TRACK_COLORS = ["#ff8f6b", "#ffcb5c", "#22e39c", "#e2eff0"]
 
-# Scatter track colours — cycle through blue, green, orange, white
-TRACK_COLORS = [
-    "#74c0fc",  # light blue
-    "#69db7c",  # light green
-    "#fda769",  # orange
-    "#f2f2f7",  # white
-]
+
+def _sync_colors_from_palette() -> None:
+    """Pull live theme colours from gui.palette. Called at the top of
+    make_logo() so the artwork always matches the current theme/mode."""
+    global BG, BEAM, BEAM2, FG, FG_DIM, TARGET, TRACK_COLORS
+    try:
+        import sys as _sys, os as _os
+        _here = _os.path.dirname(os.path.abspath(__file__))
+        if _here not in _sys.path:
+            _sys.path.insert(0, _here)
+        import palette as _pal
+        BG     = _pal.BG
+        BEAM   = _pal.ACCENT
+        BEAM2  = _pal.ACCENTH
+        FG     = _pal.FG
+        FG_DIM = _pal.FG_DIM
+        TARGET = _pal.ACCENT
+        TRACK_COLORS = [_pal.COPPER, _pal.ACCENT2, _pal.ACCENT, _pal.FG]
+    except Exception:
+        pass   # fall back to the module defaults above
 
 
 def _curved_track(ax, x0, y0, angle_deg, length, curve, color, lw, alpha, zorder=3):
@@ -195,28 +211,35 @@ def make_logo(
     out_dir: str | None = None,
     gui_name:  str = "logo_gui.png",
     docs_name: str = "logo_docs.png",
-) -> tuple[str, str]:
+    gui_only:  bool = False,
+) -> tuple[str, str | None]:
     """
-    Generate both logo sizes.
+    Generate the logo artwork, coloured from the live theme in gui.palette.
 
     Parameters
     ----------
     out_dir : str, optional
         Output directory. Defaults to the directory containing this file
         (i.e. gui/ when logo.py lives there).
+    gui_only : bool, optional
+        Skip the docs-site variant — used when regenerating after a runtime
+        theme switch, where only the in-app header logo needs to change.
 
     Returns
     -------
-    (gui_path, docs_path) : tuple of absolute paths
+    (gui_path, docs_path) : tuple of absolute paths (docs_path is None if
+    gui_only=True)
     """
+    _sync_colors_from_palette()
     if out_dir is None:
         out_dir = os.path.dirname(os.path.abspath(__file__))
 
+    variants = [(420, 100, gui_name, 16.0, 8.0)]   # GUI header
+    if not gui_only:
+        variants.append((420, 140, docs_name, 9.5, 4.8))   # MkDocs
+
     results = []
-    for (w_px, h_px, fname, title_fs, sub_fs) in [
-        (420, 100, gui_name,  16.0, 8.0),   # GUI header — larger and more legible
-        (420, 140, docs_name, 9.5, 4.8),    # MkDocs
-    ]:
+    for (w_px, h_px, fname, title_fs, sub_fs) in variants:
         dpi   = 100
         fig, ax = plt.subplots(figsize=(w_px / dpi, h_px / dpi), dpi=dpi)
         fig.patch.set_facecolor(BG)
@@ -227,7 +250,7 @@ def make_logo(
         plt.close(fig)
         results.append(os.path.abspath(path))
 
-    return results[0], results[1]
+    return results[0], (results[1] if len(results) > 1 else None)
 
 
 if __name__ == "__main__":

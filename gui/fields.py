@@ -29,13 +29,7 @@ from PySide6.QtGui import QColor, QPalette
 
 
 from core.formulas import FORMULAS
-from palette import (
-    BG, PANEL, MANTLE, BORDER, SURFACE2,
-    ACCENT, ACCENT2, FG, FG_DIM, FG_LBL,
-    SUCCESS, WARN, ERROR,
-    COLOR_COMPUTED, COLOR_CONFLICT,
-    COLOR_LOCKED_BG, COLOR_LOCKED_FG, COLOR_LOCK_ON, COLOR_LOCK_OFF,
-)
+import palette as _pal
 
 
 class LockableField(QWidget):
@@ -75,7 +69,6 @@ class LockableField(QWidget):
         self._label = QLabel(label)
         self._label.setFixedWidth(240)
         self._label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self._label.setStyleSheet(f"color: {FG_LBL}; font-size: 12px;")
         layout.addWidget(self._label)
 
         # Value entry
@@ -83,7 +76,6 @@ class LockableField(QWidget):
         self._edit.setFixedWidth(160)
         self._edit.setPlaceholderText("—")
         self._edit.setAlignment(Qt.AlignRight)
-        self._edit.setStyleSheet(self._edit_style())
         self._edit.textEdited.connect(self._on_text_edited)
         layout.addWidget(self._edit)
 
@@ -91,18 +83,12 @@ class LockableField(QWidget):
         self._unit = QLabel(unit if unit else "")
         self._unit.setFixedWidth(80)
         self._unit.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self._unit.setStyleSheet(f"color: {FG_DIM}; font-size: 11px;")
         layout.addWidget(self._unit)
 
         # Info button
         self._info_btn = QPushButton("i")
         self._info_btn.setFixedSize(24, 24)
         self._info_btn.setToolTip("Show formula")
-        self._info_btn.setStyleSheet(
-            f"QPushButton {{ background: {PANEL}; border: 1px solid {ACCENT};"
-            f" border-radius: 4px; color: {ACCENT}; font-size: 11px; font-weight: bold; }}"
-            f"QPushButton:hover {{ background: {ACCENT}; color: {BG}; }}"
-        )
         self._info_btn.clicked.connect(self._on_info_clicked)
         layout.addWidget(self._info_btn)
 
@@ -111,7 +97,6 @@ class LockableField(QWidget):
         self._lock_btn.setFixedSize(32, 28)
         self._lock_btn.setCheckable(True)
         self._lock_btn.setToolTip("Lock this value")
-        self._lock_btn.setStyleSheet(self._lock_style())
         self._lock_btn.clicked.connect(self._on_lock_clicked)
         layout.addWidget(self._lock_btn)
 
@@ -123,6 +108,25 @@ class LockableField(QWidget):
 
         # Keyboard navigation — Enter/Return moves to next field
         self._edit.returnPressed.connect(self._on_return_pressed)
+
+        self.refresh_theme()
+
+    # -----------------------------------------------------------------------
+    # Theming
+    # -----------------------------------------------------------------------
+
+    def refresh_theme(self) -> None:
+        """Re-apply every inline stylesheet using the live palette. Called
+        once at construction and again after a runtime theme switch."""
+        self._label.setStyleSheet(f"color: {_pal.FG_LBL}; font-size: 12px;")
+        self._unit.setStyleSheet(f"color: {_pal.FG_DIM}; font-size: 11px;")
+        self._info_btn.setStyleSheet(
+            f"QPushButton {{ background: {_pal.PANEL}; border: 1px solid {_pal.ACCENT};"
+            f" border-radius: 4px; color: {_pal.ACCENT}; font-size: 11px; font-weight: bold; }}"
+            f"QPushButton:hover {{ background: {_pal.ACCENT}; color: {_pal.AINK}; }}"
+        )
+        self._edit.setStyleSheet(self._edit_style())
+        self._lock_btn.setStyleSheet(self._lock_style())
 
     # -----------------------------------------------------------------------
     # Public API
@@ -206,17 +210,17 @@ class LockableField(QWidget):
         msg.setText(formula)
         msg.setIcon(QMessageBox.Information)
         msg.setStyleSheet(
-            f"QMessageBox {{ background: {PANEL}; color: {FG}; }}"
-            f"QLabel {{ color: {FG}; font-size: 12px; }}"
-            f"QPushButton {{ background: {ACCENT}; color: {BG}; border-radius: 4px; padding: 4px 12px; }}"
+            f"QMessageBox {{ background: {_pal.PANEL}; color: {_pal.FG}; }}"
+            f"QLabel {{ color: {_pal.FG}; font-size: 12px; }}"
+            f"QPushButton {{ background: {_pal.ACCENT}; color: {_pal.AINK}; border-radius: 4px; padding: 4px 12px; }}"
         )
         msg.exec()
 
     def _on_context_menu(self, pos) -> None:
         menu = QMenu(self)
         menu.setStyleSheet(
-            f"QMenu {{ background: {PANEL}; color: {FG}; border: 1px solid {BORDER}; }}"
-            f"QMenu::item:selected {{ background: {ACCENT}; color: {BG}; }}"
+            f"QMenu {{ background: {_pal.PANEL}; color: {_pal.FG}; border: 1px solid {_pal.BORDER}; }}"
+            f"QMenu::item:selected {{ background: {_pal.ACCENT}; color: {_pal.AINK}; }}"
         )
         copy_val = menu.addAction("Copy value")
         copy_with_unit = menu.addAction("Copy value with unit")
@@ -247,37 +251,37 @@ class LockableField(QWidget):
     def _edit_style(self) -> str:
         if self._locked:
             return (
-                f"QLineEdit {{ background: {COLOR_LOCKED_BG}; color: {COLOR_LOCKED_FG};"
-                f" border: 1px solid {BORDER}; border-radius: 4px; padding: 2px 6px; }}"
+                f"QLineEdit {{ background: {_pal.COLOR_LOCKED_BG}; color: {_pal.COLOR_LOCKED_FG};"
+                f" border: 1px solid {_pal.BORDER}; border-radius: 4px; padding: 2px 6px; }}"
             )
         if self._conflict:
             return (
-                f"QLineEdit {{ background: {COLOR_CONFLICT}; color: {ERROR};"
-                f" border: 1px solid {ERROR}; border-radius: 4px; padding: 2px 6px; }}"
+                f"QLineEdit {{ background: {_pal.COLOR_CONFLICT}; color: {_pal.ERROR};"
+                f" border: 1px solid {_pal.ERROR}; border-radius: 4px; padding: 2px 6px; }}"
             )
         if self._computed:
             return (
-                f"QLineEdit {{ background: {COLOR_COMPUTED}; color: {ACCENT};"
-                f" border: 1px solid {ACCENT2}; border-radius: 4px; padding: 2px 6px; }}"
+                f"QLineEdit {{ background: {_pal.COLOR_COMPUTED}; color: {_pal.ACCENT};"
+                f" border: 1px solid {_pal.ACCENTH}; border-radius: 4px; padding: 2px 6px; }}"
             )
         # Normal — user-entered
         return (
-            f"QLineEdit {{ background: {MANTLE}; color: {FG};"
-            f" border: 1px solid {BORDER}; border-radius: 4px; padding: 2px 6px; }}"
-            f"QLineEdit:focus {{ border: 1px solid {ACCENT}; border-left: 3px solid {ACCENT}; }}"
+            f"QLineEdit {{ background: {_pal.MANTLE}; color: {_pal.FG};"
+            f" border: 1px solid {_pal.BORDER}; border-radius: 4px; padding: 2px 6px; }}"
+            f"QLineEdit:focus {{ border: 1px solid {_pal.ACCENT}; border-left: 3px solid {_pal.ACCENT}; }}"
         )
 
     def _lock_style(self) -> str:
         if self._locked:
             return (
-                f"QPushButton {{ background: {COLOR_LOCK_ON}; border: 1px solid {COLOR_LOCK_ON};"
-                f" border-radius: 4px; color: {BG}; font-size: 10px; font-weight: bold; }}"
-                f"QPushButton:hover {{ background: {ACCENT2}; }}"
+                f"QPushButton {{ background: {_pal.COLOR_LOCK_ON}; border: 1px solid {_pal.COLOR_LOCK_ON};"
+                f" border-radius: 4px; color: {_pal.AINK}; font-size: 10px; font-weight: bold; }}"
+                f"QPushButton:hover {{ background: {_pal.ACCENTH}; }}"
             )
         return (
-            f"QPushButton {{ background: transparent; border: 1px solid {BORDER};"
-            f" border-radius: 4px; color: {FG_LBL}; font-size: 10px; }}"
-            f"QPushButton:hover {{ background: {SURFACE2}; border-color: {ACCENT}; color: {ACCENT}; }}"
+            f"QPushButton {{ background: transparent; border: 1px solid {_pal.BORDER};"
+            f" border-radius: 4px; color: {_pal.FG_LBL}; font-size: 10px; }}"
+            f"QPushButton:hover {{ background: {_pal.SURFACE2}; border-color: {_pal.ACCENT}; color: {_pal.ACCENT}; }}"
         )
 
 

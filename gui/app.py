@@ -7,6 +7,8 @@ QMainWindow — ties together particle selector, tabs, solver, and menus.
 from __future__ import annotations
 import sys
 import os
+import json
+from pathlib import Path
 
 # Ensure project root is on sys.path when run from any directory
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -22,8 +24,8 @@ from PySide6.QtWidgets import (
     QFileDialog, QMessageBox, QDoubleSpinBox, QFrame, QSizePolicy,
     QLineEdit, QGridLayout, QStackedWidget, QScrollArea,
 )
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont, QColor, QPalette, QAction
+from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtGui import QFont, QColor, QPalette, QAction, QPixmap
 
 from core.models import BeamState, PARTICLES
 from core.physics import solve
@@ -32,6 +34,9 @@ from gui.tabs import (
     RelativisticTab, TransverseTab, LongitudinalTab,
     RingRFTab, RadiationTab, LuminosityTab,
 )
+import palette as _pal
+
+RANBEAM_VERSION = "2.0.0"
 
 # ---------------------------------------------------------------------------
 # Machine type definitions
@@ -59,212 +64,170 @@ TAB_NAMES = [
     "Luminosity",
 ]
 
-from palette import (
-    BG, PANEL, MANTLE, CRUST, BORDER, SURFACE2,
-    ACCENT, ACCENT2, FG, FG_DIM, FG_LBL,
-    SUCCESS, WARN, ERROR,
-)
+# ---------------------------------------------------------------------------
+# Settings persistence — remembers the chosen theme/mode across runs
+# ---------------------------------------------------------------------------
+_SETTINGS_FILE = Path.home() / ".ranbeam_settings.json"
+
+
+def _read_settings() -> dict:
+    try:
+        data = json.loads(_SETTINGS_FILE.read_text())
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_settings() -> None:
+    data = {
+        "app_theme": _pal._current_theme,
+        "app_mode":  _pal._current_mode,
+    }
+    try:
+        _SETTINGS_FILE.write_text(json.dumps(data, indent=2))
+    except Exception:
+        pass   # never block the GUI on a settings write
+
 
 # ---------------------------------------------------------------------------
-# Global stylesheet
+# Global stylesheet — rebuilt fresh from the live palette on every theme
+# switch (see RanBeamWindow._switch_theme). Never bind these colours to
+# local names at import time — always read _pal.X at call time.
 # ---------------------------------------------------------------------------
-APP_STYLE = f"""
+def _build_app_style() -> str:
+    p = _pal
+    return f"""
 QMainWindow {{
-    background-color: {BG};
-    color: {FG};
-    font-family: "JetBrains Mono", "Fira Mono", "Consolas", monospace;
+    background-color: {p.BG};
+    color: {p.FG};
+    font-family: {p.FONT_STACK_MONO};
     font-size: 12px;
 }}
 QWidget {{
-    color: {FG};
-    font-family: "JetBrains Mono", "Fira Mono", "Consolas", monospace;
+    color: {p.FG};
+    font-family: {p.FONT_STACK_MONO};
     font-size: 12px;
 }}
-QTabWidget::pane {{
-    border: 1px solid {BORDER};
-    background: {BG};
-}}
-QTabBar::tab {{
-    background: {PANEL};
-    color: {FG_LBL};
-    border: 1px solid {BORDER};
-    padding: 6px 16px;
-    margin-right: 2px;
-    border-top-left-radius: 4px;
-    border-top-right-radius: 4px;
-}}
-QTabBar::tab:selected {{
-    background: {ACCENT};
-    color: {CRUST};
-    font-weight: bold;
-}}
-QTabBar::tab:hover:!selected {{
-    background: {SURFACE2};
-    color: {ACCENT};
-}}
-QTabBar::tab:disabled {{
-    background: {CRUST};
-    color: {FG_DIM};
-}}
+{p._TAB_SS}
 QGroupBox {{
-    border: 1px solid {BORDER};
-    border-radius: 4px;
+    border: 1px solid {p.BORDER};
+    border-radius: 6px;
     margin-top: 16px;
     padding-top: 8px;
-    background: {PANEL};
+    background: {p.PANEL};
 }}
 QGroupBox::title {{
     subcontrol-origin: margin;
     subcontrol-position: top left;
     left: 8px;
     top: -2px;
-    background: {ACCENT};
-    color: {CRUST};
+    background: {p.ACCENT2};
+    color: {p.AINK};
     font-size: 10px;
     font-weight: bold;
     letter-spacing: 1px;
     padding: 1px 8px;
     border-radius: 3px;
 }}
-QComboBox {{
-    background: {MANTLE};
-    border: 1px solid {BORDER};
-    border-radius: 8px;
-    padding: 3px 8px;
-    color: {FG};
-}}
-QComboBox:focus {{ border-color: {ACCENT}; }}
-QComboBox::drop-down {{ border: none; width: 20px; }}
-QComboBox QAbstractItemView {{
-    background: {PANEL};
-    color: {FG};
-    border: 1px solid {BORDER};
-    selection-background-color: {ACCENT};
-    selection-color: {CRUST};
-    outline: none;
-}}
-QPushButton {{
-    background: {PANEL};
-    border: 1px solid {BORDER};
-    border-radius: 8px;
-    padding: 4px 12px;
-    color: {ACCENT};
-    font-weight: 500;
-}}
-QPushButton:hover {{
-    background: {SURFACE2};
-    border-color: {ACCENT};
-}}
-QPushButton:pressed {{
-    background: {BORDER};
-}}
-QPushButton:disabled {{
-    color: {FG_DIM};
-    border-color: {BORDER};
-}}
-QScrollBar:vertical {{
-    background: {CRUST};
-    width: 8px;
-    border-radius: 4px;
-}}
-QScrollBar::handle:vertical {{
-    background: {SURFACE2};
-    border-radius: 4px;
-    min-height: 20px;
-}}
-QScrollBar::handle:vertical:hover {{ background: {FG_LBL}; }}
+{p._COMBO_SS}
+{p._BTN_SS}
+{p._SCROLL_SS}
 QScrollBar:horizontal {{
-    background: {CRUST};
-    height: 8px;
-    border-radius: 4px;
+    background: {p.MANTLE}; height: 8px; margin: 0; border-radius: 4px;
 }}
 QScrollBar::handle:horizontal {{
-    background: {SURFACE2};
-    border-radius: 4px;
-    min-width: 20px;
+    background: {p.SURFACE2}; border-radius: 4px; min-width: 20px;
 }}
-QScrollBar::add-line, QScrollBar::sub-line {{ background: none; border: none; }}
 QStatusBar {{
-    background: {CRUST};
-    color: {FG_LBL};
+    background: {p.MANTLE};
+    color: {p.FG_DIM};
+    border-top: 1px solid {p.BORDER};
     font-size: 11px;
 }}
 QMenuBar {{
-    background: {CRUST};
-    color: {FG_LBL};
-    border-bottom: none;
+    background: {p.CRUST};
+    color: {p.FG_LBL};
+    border-bottom: 1px solid {p.BORDER};
 }}
+QMenuBar::item {{ padding: 4px 10px; border-radius: 4px; }}
 QMenuBar::item:selected {{
-    background: {MANTLE};
-    color: {ACCENT};
+    background: {p.SURFACE2};
+    color: {p.ACCENT};
 }}
 QMenu {{
-    background: {PANEL};
-    border: 1px solid {BORDER};
-    color: {FG};
-}}
-QMenu::item:selected {{
-    background: {MANTLE};
-    color: {ACCENT};
-}}
-QLineEdit {{
-    background: {MANTLE};
-    border: 1px solid {BORDER};
+    background: {p.PANEL};
+    border: 1px solid {p.BORDER};
     border-radius: 8px;
-    padding: 2px 6px;
-    color: {FG};
+    color: {p.FG};
+    padding: 4px;
 }}
-QLineEdit:focus {{ border-color: {ACCENT}; border-left: 3px solid {ACCENT}; }}
-QLabel {{ color: {FG}; background: transparent; }}
-QCheckBox {{ color: {FG_LBL}; }}
-QCheckBox::indicator {{
-    width: 14px; height: 14px;
-    border: 1px solid {BORDER}; border-radius: 3px;
-    background: {MANTLE};
+QMenu::item {{ padding: 5px 20px; border-radius: 4px; }}
+QMenu::item:selected {{
+    background: {p.SURFACE2};
+    color: {p.ACCENT};
 }}
-QCheckBox::indicator:checked {{
-    background: {ACCENT2};
-    border-color: {ACCENT};
-}}
-QScrollArea QWidget {{ background: transparent; color: {FG}; }}
-"""
+{p._ENTRY_SS}
+QLabel {{ color: {p.FG}; background: transparent; }}
+{p._CHK_SS}
+QScrollArea QWidget {{ background: transparent; color: {p.FG}; }}
+""" + p._DIALOG_SS
+
+
+def _build_qpalette() -> QPalette:
+    p = _pal
+    pal = QPalette()
+    pal.setColor(QPalette.Window,          QColor(p.BG))
+    pal.setColor(QPalette.WindowText,      QColor(p.FG))
+    pal.setColor(QPalette.Base,            QColor(p.MANTLE))
+    pal.setColor(QPalette.AlternateBase,   QColor(p.PANEL))
+    pal.setColor(QPalette.Text,            QColor(p.FG))
+    pal.setColor(QPalette.Button,          QColor(p.CRUST))
+    pal.setColor(QPalette.ButtonText,      QColor(p.FG))
+    pal.setColor(QPalette.Dark,            QColor(p.CRUST))
+    pal.setColor(QPalette.Mid,             QColor(p.CRUST))
+    pal.setColor(QPalette.Shadow,          QColor(p.CRUST))
+    pal.setColor(QPalette.Highlight,       QColor(p.ACCENT))
+    pal.setColor(QPalette.HighlightedText, QColor(p.AINK))
+    pal.setColor(QPalette.ToolTipBase,     QColor(p.PANEL))
+    pal.setColor(QPalette.ToolTipText,     QColor(p.FG))
+    return pal
 
 
 # ---------------------------------------------------------------------------
-# Header banner
+# Header banner — logo, author/support, and the theme mode/palette switcher
 # ---------------------------------------------------------------------------
 class _Header(QWidget):
+    mode_changed  = Signal(str)   # "light" | "dark"
+    theme_changed = Signal(str)   # theme name, e.g. "Petrol"
+
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
-        self.setFixedHeight(90)
-        self.setStyleSheet(f"background: {CRUST};")
+        self.setFixedHeight(96)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 8, 16, 8)
 
-        # PNG logo
-        logo_path = os.path.join(_HERE, "logo_gui.png")
-        if os.path.exists(logo_path):
-            from PySide6.QtGui import QPixmap
-            pix = QPixmap(logo_path)
-            logo_lbl = QLabel()
-            logo_lbl.setPixmap(pix.scaled(380, 72, Qt.KeepAspectRatio,
-                                          Qt.SmoothTransformation))
-            logo_lbl.setStyleSheet("background: transparent;")
-            layout.addWidget(logo_lbl)
-        else:
-            name_row = QWidget()
-            name_row.setStyleSheet("background: transparent;")
-            name_layout = QHBoxLayout(name_row)
-            name_layout.setContentsMargins(0, 0, 0, 0)
-            name_layout.setSpacing(0)
-            ran_lbl = QLabel("Ran")
-            ran_lbl.setStyleSheet(f"color: {FG}; font-size: 28px; font-weight: bold; font-family: 'JetBrains Mono', monospace; background: transparent;")
-            beam_lbl = QLabel("Beam")
-            beam_lbl.setStyleSheet(f"color: {ACCENT}; font-size: 28px; font-weight: bold; font-family: 'JetBrains Mono', monospace; background: transparent;")
-            name_layout.addWidget(ran_lbl)
-            name_layout.addWidget(beam_lbl)
-            layout.addWidget(name_row)
+        logo_col = QWidget()
+        logo_col.setStyleSheet("background: transparent;")
+        lc = QVBoxLayout(logo_col)
+        lc.setContentsMargins(0, 0, 0, 0)
+        lc.setSpacing(2)
 
+        self._logo_lbl = QLabel()
+        self._logo_lbl.setStyleSheet("background: transparent;")
+        lc.addWidget(self._logo_lbl)
+        self._reload_logo()
+
+        self._version_lbl = QLabel(f"v{RANBEAM_VERSION}")
+        self._version_lbl.setAlignment(Qt.AlignCenter)
+        ver_row = QWidget()
+        ver_row.setStyleSheet("background: transparent;")
+        vr = QHBoxLayout(ver_row)
+        vr.setContentsMargins(0, 0, 0, 0)
+        vr.addWidget(self._version_lbl)
+        vr.addStretch()
+        lc.addWidget(ver_row)
+
+        layout.addWidget(logo_col)
         layout.addStretch()
 
         # Author / support
@@ -272,19 +235,114 @@ class _Header(QWidget):
         info_layout.setContentsMargins(0, 0, 0, 0)
         info_layout.setSpacing(4)
 
-        author_lbl = QLabel("Author: Randika Gamage (randika@jlab.org)")
-        author_lbl.setStyleSheet(f"color: {FG_LBL}; font-size: 13px; background: transparent;")
-        author_lbl.setAlignment(Qt.AlignRight)
+        self._author_lbl = QLabel("Author: Randika Gamage (randika@jlab.org)")
+        self._author_lbl.setAlignment(Qt.AlignRight)
 
-        support_lbl = QLabel("Support: Good luck, I believe in you")
-        support_lbl.setStyleSheet(f"color: {FG_DIM}; font-size: 12px; font-style: italic; background: transparent;")
-        support_lbl.setAlignment(Qt.AlignRight)
+        self._support_lbl = QLabel("Support: Good luck, I believe in you")
+        self._support_lbl.setAlignment(Qt.AlignRight)
 
-        info_layout.addStretch()
-        info_layout.addWidget(author_lbl)
-        info_layout.addWidget(support_lbl)
-        info_layout.addStretch()
+        info_layout.addWidget(self._author_lbl)
+        info_layout.addWidget(self._support_lbl)
+
+        # Theme mode toggle + palette picker
+        self._tog_widget = QWidget()
+        tl = QHBoxLayout(self._tog_widget)
+        tl.setContentsMargins(3, 3, 3, 3)
+        tl.setSpacing(2)
+
+        self._btn_light = QPushButton("☀ Light")
+        self._btn_light.setFixedHeight(24)
+        self._btn_light.setCheckable(True)
+        self._btn_dark = QPushButton("☾ Dark")
+        self._btn_dark.setFixedHeight(24)
+        self._btn_dark.setCheckable(True)
+        self._btn_light.clicked.connect(lambda: self.mode_changed.emit("light"))
+        self._btn_dark.clicked.connect(lambda: self.mode_changed.emit("dark"))
+        tl.addWidget(self._btn_light)
+        tl.addWidget(self._btn_dark)
+
+        self._theme_dd = QComboBox()
+        self._theme_dd.setFixedHeight(24)
+        self._theme_dd.addItems(list(_pal.THEMES.keys()))
+        self._theme_dd.currentTextChanged.connect(self.theme_changed.emit)
+        tl.addWidget(self._theme_dd)
+
+        tog_row = QWidget()
+        tr = QHBoxLayout(tog_row)
+        tr.setContentsMargins(0, 0, 0, 0)
+        tr.addStretch()
+        tr.addWidget(self._tog_widget)
+
+        info_layout.addWidget(tog_row)
         layout.addLayout(info_layout)
+
+        self.refresh_theme()
+
+    def _reload_logo(self) -> None:
+        logo_path = os.path.join(_HERE, "logo_gui.png")
+        if os.path.exists(logo_path):
+            pix = QPixmap(logo_path)
+            self._logo_lbl.setPixmap(
+                pix.scaled(340, 76, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            )
+        else:
+            self._logo_lbl.setText("RanBeam")
+
+    def refresh_theme(self) -> None:
+        """Re-apply header-specific inline styles and the switcher's own
+        checked/unchecked state after a theme switch (also called once at
+        construction)."""
+        p = _pal
+        self.setStyleSheet(f"background: {p.PANEL}; border-bottom: 1px solid {p.BORDER};")
+        self._author_lbl.setStyleSheet(f"color: {p.FG_DIM}; font-size: 13px; background: transparent;")
+        self._support_lbl.setStyleSheet(f"color: {p.FG_DIM}; font-size: 12px; font-style: italic; background: transparent;")
+        self._version_lbl.setStyleSheet(
+            f"color: {p.FG_DIM}; background: {p.MANTLE}; border: 1px solid {p.BORDER};"
+            f" border-radius: 4px; padding: 1px 6px; font-size: 10px;"
+            f" font-family: {p.FONT_STACK_MONO};"
+        )
+        self._tog_widget.setStyleSheet(
+            f"background: {p.MANTLE}; border: 1px solid {p.BORDER}; border-radius: 8px;"
+        )
+        toggle_ss = f"""
+            QPushButton {{
+                background: transparent; border: 1px solid transparent;
+                border-radius: 6px; color: {p.FG_DIM}; padding: 3px 10px; font-size: 11px;
+            }}
+            QPushButton:checked {{
+                background: {p.ASOFT}; border-color: {p.ACCENT}; color: {p.ACCENT};
+            }}
+            QPushButton:hover:!checked {{ background: {p.SURFACE2}; color: {p.FG}; }}
+        """
+        self._btn_light.setStyleSheet(toggle_ss)
+        self._btn_dark.setStyleSheet(toggle_ss)
+        self._btn_light.blockSignals(True)
+        self._btn_dark.blockSignals(True)
+        self._btn_light.setChecked(p._current_mode == "light")
+        self._btn_dark.setChecked(p._current_mode == "dark")
+        self._btn_light.blockSignals(False)
+        self._btn_dark.blockSignals(False)
+
+        self._theme_dd.setStyleSheet(f"""
+            QComboBox {{
+                background: transparent; border: 1px solid transparent;
+                border-radius: 6px; color: {p.FG_DIM}; padding: 3px 8px; font-size: 11px;
+            }}
+            QComboBox:hover {{ background: {p.SURFACE2}; color: {p.FG}; }}
+            QComboBox::drop-down {{ border: none; width: 14px; }}
+            QComboBox::down-arrow {{ width: 0; height: 0; }}
+            QComboBox QAbstractItemView {{
+                background: {p.PANEL}; color: {p.FG};
+                border: 1px solid {p.BORDER}; border-radius: 6px; padding: 2px;
+                selection-background-color: {p.ACCENT}; selection-color: {p.AINK};
+                outline: none;
+            }}
+        """)
+        self._theme_dd.blockSignals(True)
+        self._theme_dd.setCurrentText(p._current_theme)
+        self._theme_dd.blockSignals(False)
+
+        self._reload_logo()
 
 
 # ---------------------------------------------------------------------------
@@ -306,14 +364,12 @@ class _ParticleSelector(QWidget):
         layout.addWidget(self.particle_combo)
 
         self._custom_mass_label = QLabel("Mass (MeV/c²):")
-        self._custom_mass_label.setStyleSheet(f"color: {FG_LBL};")
         layout.addWidget(self._custom_mass_label)
         self.custom_mass = QLineEdit("938.272")
         self.custom_mass.setFixedWidth(110)
         layout.addWidget(self.custom_mass)
 
         self._custom_q_label = QLabel("Charge (e):")
-        self._custom_q_label.setStyleSheet(f"color: {FG_LBL};")
         layout.addWidget(self._custom_q_label)
         self.custom_charge = QLineEdit("1")
         self.custom_charge.setFixedWidth(70)
@@ -330,6 +386,12 @@ class _ParticleSelector(QWidget):
 
         self._toggle_custom(self.particle_combo.currentText())
         self.particle_combo.currentTextChanged.connect(self._toggle_custom)
+        self.refresh_theme()
+
+    def refresh_theme(self) -> None:
+        c = f"color: {_pal.FG_LBL};"
+        self._custom_mass_label.setStyleSheet(c)
+        self._custom_q_label.setStyleSheet(c)
 
     def _toggle_custom(self, name: str) -> None:
         is_custom = (name == "Custom")
@@ -365,13 +427,14 @@ class RanBeamWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("RanBeam — Beam Parameter Calculator")
-        self.resize(900, 780)
+        self.resize(900, 820)
         self._state    = BeamState()
         self._inhibit  = False
         self._build_ui()
         self._build_menus()
         self._connect_signals()
         self._update_state_from_particle()
+        self._restyle()
 
     def _build_ui(self) -> None:
         central = QWidget()
@@ -380,7 +443,8 @@ class RanBeamWindow(QMainWindow):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        root.addWidget(_Header())
+        self._header = _Header()
+        root.addWidget(self._header)
 
         self._selector = _ParticleSelector()
         root.addWidget(self._selector)
@@ -444,7 +508,6 @@ class RanBeamWindow(QMainWindow):
         self._status.showMessage("Ready.")
 
         self._conflict_label = QLabel("")
-        self._conflict_label.setStyleSheet(f"color: {ERROR}; font-size: 11px;")
         self._status.addPermanentWidget(self._conflict_label)
 
     def _build_full_view(self) -> QScrollArea:
@@ -458,7 +521,6 @@ class RanBeamWindow(QMainWindow):
         scroll.setFrameShape(QFrame.NoFrame)
 
         self._full_container = QWidget()
-        self._full_container.setStyleSheet(f"background: {BG};")
         self._full_grid = QGridLayout(self._full_container)
         self._full_grid.setContentsMargins(10, 10, 10, 10)
         self._full_grid.setSpacing(10)
@@ -469,23 +531,14 @@ class RanBeamWindow(QMainWindow):
         for i, (row, col) in enumerate(positions):
             frame = QFrame()
             frame.setFrameShape(QFrame.StyledPanel)
-            frame.setStyleSheet(
-                f"QFrame {{ border: 1px solid {BORDER}; border-radius: 6px;"
-                f" background: {PANEL}; }}"
-            )
             fl = QVBoxLayout(frame)
             fl.setContentsMargins(0, 0, 0, 0)
             fl.setSpacing(0)
 
             title_bar = QLabel(TAB_NAMES[i])
-            title_bar.setStyleSheet(
-                f"QLabel {{ background: {ACCENT}; color: {CRUST}; font-weight: bold;"
-                f" font-size: 11px; padding: 4px 10px; border-radius: 4px 4px 0 0;"
-                f" border: none; }}"
-            )
             fl.addWidget(title_bar)
             # Placeholder — tab widget added on toggle
-            self._full_frames.append((frame, fl))
+            self._full_frames.append((frame, fl, title_bar))
             self._full_grid.addWidget(frame, row, col)
 
         for col in range(3):
@@ -502,7 +555,7 @@ class RanBeamWindow(QMainWindow):
             # Save current size before expanding
             self._saved_size = self.size()
             # Move tab widgets from QTabWidget into full view frames
-            for i, (tab, (frame, fl)) in enumerate(
+            for i, (tab, (frame, fl, title_bar)) in enumerate(
                     zip(self._tab_widgets, self._full_frames)):
                 self._tabs.removeTab(0)
                 fl.addWidget(tab)
@@ -515,7 +568,7 @@ class RanBeamWindow(QMainWindow):
                 self.resize(1400, 900)
         else:
             # Move tab widgets back into QTabWidget
-            for i, (tab, (frame, fl)) in enumerate(
+            for i, (tab, (frame, fl, title_bar)) in enumerate(
                     zip(self._tab_widgets, self._full_frames)):
                 fl.removeWidget(tab)
                 self._tabs.addTab(tab, TAB_NAMES[i])
@@ -527,7 +580,7 @@ class RanBeamWindow(QMainWindow):
             if hasattr(self, '_saved_size'):
                 self.resize(self._saved_size)
             else:
-                self.resize(900, 780)
+                self.resize(900, 820)
             # Re-apply machine visibility
             self._on_machine_changed("")
 
@@ -588,10 +641,57 @@ class RanBeamWindow(QMainWindow):
         self._btn_load.clicked.connect(self._on_load)
         self._btn_load_b2.clicked.connect(self._on_load_beam2)
 
+        self._header.mode_changed.connect(lambda m: self._switch_theme(mode=m))
+        self._header.theme_changed.connect(lambda t: self._switch_theme(theme=t))
+
         self._solve_timer = QTimer()
         self._solve_timer.setSingleShot(True)
         self._solve_timer.setInterval(150)
         self._solve_timer.timeout.connect(self._do_solve)
+
+    # -----------------------------------------------------------------------
+    # Theming
+    # -----------------------------------------------------------------------
+
+    def _switch_theme(self, mode: str | None = None, theme: str | None = None) -> None:
+        """Apply a new theme/mode, persist it, and restyle every widget."""
+        _pal.apply_theme(theme, mode)
+        _save_settings()
+        app = QApplication.instance()
+        app.setPalette(_build_qpalette())
+        app.setStyleSheet(_build_app_style())
+        try:
+            import logo
+            logo.make_logo(out_dir=_HERE, gui_only=True)
+        except Exception:
+            pass
+        self._restyle()
+
+    def _restyle(self) -> None:
+        """Re-apply every inline (per-widget) stylesheet using live theme
+        values. Widgets styled only via the global QApplication stylesheet
+        (QGroupBox, QPushButton, QComboBox, …) update automatically when
+        that stylesheet is replaced and don't need to be touched here."""
+        self._header.refresh_theme()
+        self._selector.refresh_theme()
+        for tab in self._tab_widgets:
+            tab.refresh_theme()
+
+        p = _pal
+        self._conflict_label.setStyleSheet(f"color: {p.ERROR}; font-size: 11px;")
+
+        if hasattr(self, "_full_container"):
+            self._full_container.setStyleSheet(f"background: {p.BG};")
+        for frame, fl, title_bar in getattr(self, "_full_frames", []):
+            frame.setStyleSheet(
+                f"QFrame {{ border: 1px solid {p.BORDER}; border-radius: 6px;"
+                f" background: {p.PANEL}; }}"
+            )
+            title_bar.setStyleSheet(
+                f"QLabel {{ background: {p.ACCENT2}; color: {p.AINK}; font-weight: bold;"
+                f" font-size: 11px; padding: 4px 10px; border-radius: 4px 4px 0 0;"
+                f" border: none; }}"
+            )
 
     def _schedule_solve(self) -> None:
         if not self._inhibit:
@@ -606,6 +706,8 @@ class RanBeamWindow(QMainWindow):
             new_state, conflicts = solve(self._state)
             self._state = new_state
             self._push_to_ui(conflicts)
+        except Exception as e:
+            self._status.showMessage(f"Solver error: {e}")
         finally:
             self._inhibit = False
 
@@ -660,13 +762,8 @@ class RanBeamWindow(QMainWindow):
         dlg = QDialog(self)
         dlg.setWindowTitle("Switch Machine Type?")
         dlg.setFixedSize(520, 120)
-        dlg.setStyleSheet(
-            f"QDialog {{ background: {PANEL}; }}"
-            f"QLabel {{ color: {FG}; font-size: 12px; }}"
-            f"QPushButton {{ background: {MANTLE}; border: 1px solid {BORDER};"
-            f" border-radius: 6px; padding: 6px 16px; color: {ACCENT}; }}"
-            f"QPushButton:hover {{ background: {SURFACE2}; }}"
-        )
+        # Global QApplication stylesheet (_pal._DIALOG_SS) themes QDialog/
+        # QLabel/QPushButton automatically — no per-dialog styling needed.
         layout = QVBoxLayout(dlg)
         layout.setSpacing(12)
         layout.setContentsMargins(20, 16, 20, 16)
@@ -680,10 +777,6 @@ class RanBeamWindow(QMainWindow):
         btn_electron = QPushButton("Circular — Electrons")
         btn_collider = QPushButton("Collider")
         btn_cancel   = QPushButton("Keep Linac")
-        btn_cancel.setStyleSheet(
-            f"QPushButton {{ background: {MANTLE}; border: 1px solid {BORDER};"
-            f" border-radius: 6px; padding: 6px 16px; color: {FG_LBL}; }}"
-        )
         for btn in [btn_proton, btn_electron, btn_collider, btn_cancel]:
             btn_row.addWidget(btn)
         layout.addLayout(btn_row)
@@ -813,7 +906,7 @@ class RanBeamWindow(QMainWindow):
         QMessageBox.about(
             self,
             "About RanBeam",
-            "<b>RanBeam v1.0</b><br>"
+            f"<b>RanBeam v{RANBEAM_VERSION}</b><br>"
             "Accelerator Beam Parameter Calculator<br><br>"
             "Auto-propagating dependency graph solver.<br>"
             "Enter any known quantities — everything derivable is computed automatically.<br>"
@@ -829,36 +922,21 @@ def launch() -> None:
     app = QApplication.instance() or QApplication(sys.argv)
     app.setStyle("Fusion")
 
-    palette = QPalette()
-    palette.setColor(QPalette.Window,          QColor("#0F2219"))
-    palette.setColor(QPalette.WindowText,      QColor(FG))
-    palette.setColor(QPalette.Base,            QColor(MANTLE))
-    palette.setColor(QPalette.AlternateBase,   QColor(PANEL))
-    palette.setColor(QPalette.Text,            QColor(FG))
-    palette.setColor(QPalette.Button,          QColor(CRUST))
-    palette.setColor(QPalette.ButtonText,      QColor(FG))
-    palette.setColor(QPalette.Dark,            QColor(CRUST))
-    palette.setColor(QPalette.Mid,             QColor(CRUST))
-    palette.setColor(QPalette.Shadow,          QColor(CRUST))
-    palette.setColor(QPalette.Highlight,       QColor(ACCENT))
-    palette.setColor(QPalette.HighlightedText, QColor(CRUST))
-    palette.setColor(QPalette.ToolTipBase,     QColor(PANEL))
-    palette.setColor(QPalette.ToolTipText,     QColor(FG))
-    app.setPalette(palette)
-    app.setStyleSheet(APP_STYLE)
+    settings = _read_settings()
+    _pal.apply_theme(settings.get("app_theme"), settings.get("app_mode"))
 
-    logo_path = os.path.join(_HERE, "logo_gui.png")
-    if not os.path.exists(logo_path):
-        try:
-            import importlib.util
-            spec = importlib.util.spec_from_file_location(
-                "logo", os.path.join(_HERE, "logo.py")
-            )
-            logo_mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(logo_mod)
-            logo_mod.make_logo(out_dir=_HERE)
-        except Exception:
-            pass
+    app.setPalette(_build_qpalette())
+    app.setStyleSheet(_build_app_style())
+
+    # Regenerate the GUI logo variant so it always matches the theme/mode
+    # just loaded from settings — a cached PNG from a previous theme would
+    # otherwise clash with the freshly-applied palette.
+    docs_logo_path = os.path.join(_HERE, "logo_docs.png")
+    try:
+        import logo
+        logo.make_logo(out_dir=_HERE, gui_only=os.path.exists(docs_logo_path))
+    except Exception:
+        pass
 
     win = RanBeamWindow()
     win.show()
