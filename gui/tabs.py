@@ -17,7 +17,7 @@ from PySide6.QtCore import Signal, Qt
 
 from gui.fields import LockableField
 from core.models import UNITS, LABELS, BeamState
-import palette as _pal
+from . import palette as _pal
 
 
 # ---------------------------------------------------------------------------

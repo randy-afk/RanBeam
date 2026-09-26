@@ -49,11 +49,20 @@ def _sync_colors_from_palette() -> None:
     make_logo() so the artwork always matches the current theme/mode."""
     global BG, BEAM, BEAM2, FG, FG_DIM, TARGET, TRACK_COLORS
     try:
-        import sys as _sys, os as _os
-        _here = _os.path.dirname(os.path.abspath(__file__))
-        if _here not in _sys.path:
-            _sys.path.insert(0, _here)
-        import palette as _pal
+        if __package__:
+            # Normal case: loaded as gui.logo (from source or a frozen
+            # build) — a relative import is the only form PyInstaller's
+            # static analysis can see and bundle correctly.
+            from . import palette as _pal
+        else:
+            # Standalone script usage (`python logo.py`) has no package
+            # context for a relative import, so fall back to the sys.path
+            # trick — this path is never hit inside the packaged app.
+            import sys as _sys, os as _os
+            _here = _os.path.dirname(os.path.abspath(__file__))
+            if _here not in _sys.path:
+                _sys.path.insert(0, _here)
+            import palette as _pal
         BG     = _pal.BG
         BEAM   = _pal.ACCENT
         BEAM2  = _pal.ACCENTH

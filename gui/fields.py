@@ -15,10 +15,6 @@ Colour states:
 """
 
 from __future__ import annotations
-import sys, os
-_HERE = os.path.dirname(os.path.abspath(__file__))
-if _HERE not in sys.path:
-    sys.path.insert(0, _HERE)
 
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QLabel, QLineEdit, QPushButton,
@@ -29,7 +25,7 @@ from PySide6.QtGui import QColor, QPalette
 
 
 from core.formulas import FORMULAS
-import palette as _pal
+from . import palette as _pal
 
 
 class LockableField(QWidget):

@@ -10,13 +10,12 @@ import os
 import json
 from pathlib import Path
 
-# Ensure project root is on sys.path when run from any directory
+# Ensure project root is on sys.path when run from any directory — needed
+# for the sibling `core` package import below.
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_HERE)
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
-if _HERE not in sys.path:
-    sys.path.insert(0, _HERE)
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -34,9 +33,9 @@ from gui.tabs import (
     RelativisticTab, TransverseTab, LongitudinalTab,
     RingRFTab, RadiationTab, LuminosityTab,
 )
-import palette as _pal
+from . import palette as _pal
 
-RANBEAM_VERSION = "2.0.0"
+RANBEAM_VERSION = "2.0.1"
 
 # ---------------------------------------------------------------------------
 # Machine type definitions
@@ -661,7 +660,7 @@ class RanBeamWindow(QMainWindow):
         app.setPalette(_build_qpalette())
         app.setStyleSheet(_build_app_style())
         try:
-            import logo
+            from . import logo
             logo.make_logo(out_dir=_HERE, gui_only=True)
         except Exception:
             pass
@@ -933,7 +932,7 @@ def launch() -> None:
     # otherwise clash with the freshly-applied palette.
     docs_logo_path = os.path.join(_HERE, "logo_docs.png")
     try:
-        import logo
+        from . import logo
         logo.make_logo(out_dir=_HERE, gui_only=os.path.exists(docs_logo_path))
     except Exception:
         pass
